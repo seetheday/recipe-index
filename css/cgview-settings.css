@@ -1,7 +1,9 @@
 
 /* theme settings */
 
-#ri_sc {display:none;}
+#ri_sc {
+    display: block;
+}
 #riview-settings-left .subsubsub{z-index:5;}
 #riview-settings-left div.menu{border-bottom:1px solid #eee;}
 #riview-settings-left .subsubsub a{color:#21759b;font-size:115%;}
