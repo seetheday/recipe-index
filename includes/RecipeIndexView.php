@@ -6,9 +6,11 @@ Author : Simon Austin (simon@kremental.com)
 Inspired by the Category Grid View Plugin by Anshul Sharma
  */
  
- if(preg_match('#' . basename(__FILE__) . '#', $_SERVER['PHP_SELF'])) { die('Sorry, Dude. You are not allowed to call this page directly.'); }
- 
- require_once 'RecipeIndexData.php';
+ if ( ! defined( 'ABSPATH' ) ) {
+     exit;
+ }
+
+ require_once VRI_PLUGIN_DIR . 'includes/RecipeIndexData.php';
  
  class RecipeIndexView{
  	
@@ -28,7 +30,8 @@ Inspired by the Category Grid View Plugin by Anshul Sharma
 	
 	 private function ri_build_output(){
 	 	global $paginateVal;
-	 	$this->rioutput='<div class="riview '.get_ri_option('color_scheme').'">';
+                $scheme = sanitize_html_class( get_ri_option('color_scheme'), 'light' );
+                $this->rioutput='<div class="riview '.$scheme.'">';
 		$this->rioutput.= '<ul id="ri-ul">'."\n"; 
         //Posts loop
         foreach ($this->ridata->ri_get_posts() as $single):
@@ -44,12 +47,15 @@ Inspired by the Category Grid View Plugin by Anshul Sharma
 	Build each item
      */
     private function ri_build_item($single){
-		$size=array();
-		$size=$this->ri_get_size();
-	/* Simon - Add 60px to height to allow for space below image for text */
-	$size[1] += 60;
-		
-        $riitem='<li id="ri-'.$single->ID.'" style="width:'.$size[0].'px;height:'.$size[1].'px;">';
+        $size=array();
+        $size=$this->ri_get_size();
+        /* Simon - Add 60px to height to allow for space below image for text */
+        $size[1] += 60;
+
+        $width  = absint( $size[0] );
+        $height = absint( $size[1] );
+
+        $riitem='<li id="ri-'.absint( $single->ID ).'" style="width:'.$width.'px;height:'.$height.'px;">';
 		
         $riitem.= $this->ri_get_image($single);
 		
@@ -63,55 +69,98 @@ Inspired by the Category Grid View Plugin by Anshul Sharma
         return $riitem;
     }
 	
-	private function ri_get_image($single){
-		$ri_img = '';
-  		ob_start();
-  		ob_end_clean();
-		if(get_ri_option('image_source')=='featured'){
-			if (has_post_thumbnail($single->ID )){
-				$image = wp_get_attachment_image_src(get_post_thumbnail_id( $single->ID ), 'single-post-thumbnail' );
-				$ri_img = $image[0];
-			}
-			else {
-				$output = preg_match_all('/<img.+src=[\'"]([^\'"]+)[\'"].*>/i', $single->post_content, $matches);
- 				$ri_img = $matches [1] [0];
-			}
-		}
-		else {
- 			$output = preg_match_all('/<img.+src=[\'"]([^\'"]+)[\'"].*>/i', $single->post_content, $matches);
- 			$ri_img = $matches [1] [0];
-		}
+private function ri_get_image($single){
+$size   = $this->ri_get_size();
+$width  = absint( $size[0] );
+$height = absint( $size[1] );
+$image  = $this->ri_resolve_image_source( $single );
 
-  		if(empty($ri_img)){ //Defines a default image
-    			$ri_img = get_ri_option('custom_image');
-		}
-		
-		$size=array();
-		$size=$this->ri_get_size();
-			
-			if((!is_numeric($this->params['quality']))||(int)$this->params['quality']>100)
-				$this->params['quality']='75';
-		//uses TimThumb to generate thumbnails on the fly	
-		$ri_url = plugin_dir_url(__FILE__);
-		$returnlink = ($this->params['lightbox'])? ('"'.$ri_url.'RecipeIndexPost.php?ID='.$single->ID.'" class="ripost"') : ('"'.get_permalink($single->ID)).'"';	
-		return '<a href='.$returnlink.'><img src="'.$ri_url.'timthumb.php?src='.urlencode($ri_img).'&amp;h='.$size[1].'&amp;w='.$size[0].'&amp;zc=1&amp;q='.$this->params['quality'].'" alt="'.$single->post_title.'" title="'.$single->post_title.'"/></a>';
-		
+if ( empty( $image['attachment_id'] ) && empty( $image['src'] ) ) {
+return '';
+}
 
-	}
-	
-	private function ri_get_title($single){
-		$ri_url = plugin_dir_url(__FILE__);
-		if($this->params['title']){
-			$title_array = get_post_meta($single->ID, $this->params['title']);
-			$title = $title_array[0];
-			if(!$title){$title = $single->post_title;}
-		}
-		else { $title = $single->post_title;}
-		$returnlink = ($this->params['lightbox'])? ('"'.$ri_url.'RecipeIndexPost.php?ID='.$single->ID.'" class="ripost"') : ('"'.get_permalink($single->ID)).'"';
-		$rifontsize=$this->ri_get_font_size();
-		$rititle='<div class="riback rinojs '.$this->params['showtitle'].'"></div><div class="rititle rinojs '.$this->params['showtitle'].'"><p style="font-size:'.$rifontsize.'px;line-height:'.(1.2*$rifontsize).'px;"><a href='.$returnlink.'>'.$title.'</a></p></div>';
-		return $rititle;
-	}
+$returnlink = ($this->params['lightbox'])? add_query_arg( array( 'ID' => absint( $single->ID ) ), VRI_PLUGIN_URL . 'includes/RecipeIndexPost.php' ) : get_permalink($single->ID);
+$title      = get_the_title( $single->ID );
+$image_html = '';
+
+if ( $image['attachment_id'] ) {
+$image_html = wp_get_attachment_image(
+$image['attachment_id'],
+array( $width, $height ),
+false,
+array(
+'class' => 'ri-thumb',
+'alt'   => $title,
+'title' => $title,
+)
+);
+}
+
+if ( empty( $image_html ) && ! empty( $image['src'] ) ) {
+$image_html = sprintf(
+'<img class="ri-thumb" src="%1$s" alt="%2$s" title="%2$s" width="%3$d" height="%4$d" loading="lazy" />',
+esc_url( $image['src'] ),
+esc_attr( $title ),
+$width,
+$height
+);
+}
+
+if ( empty( $image_html ) ) {
+return '';
+}
+
+return '<a href="'.esc_url( $returnlink ).'"'.( $this->params['lightbox'] ? ' class="ripost"' : '' ).'>'.$image_html.'</a>';
+
+
+}
+
+private function ri_resolve_image_source( $single ) {
+$ri_img        = '';
+$attachment_id = 0;
+
+if ( 'featured' === get_ri_option( 'image_source' ) ) {
+if ( has_post_thumbnail( $single->ID ) ) {
+$attachment_id = get_post_thumbnail_id( $single->ID );
+$image         = wp_get_attachment_image_src( $attachment_id, 'full' );
+$ri_img        = isset( $image[0] ) ? $image[0] : '';
+} else {
+$ri_img = $this->ri_extract_first_image_from_content( $single->post_content );
+}
+} else {
+$ri_img = $this->ri_extract_first_image_from_content( $single->post_content );
+}
+
+if ( empty( $ri_img ) ) {
+$ri_img = get_ri_option('custom_image');
+}
+
+return array(
+'attachment_id' => $attachment_id,
+'src'           => $ri_img,
+);
+}
+
+private function ri_extract_first_image_from_content( $content ) {
+$matches = array();
+preg_match_all('/<img.+src=[\'\"]([^\'\"]+)[\'\"].*>/i', $content, $matches);
+
+return ! empty( $matches[1][0] ) ? $matches[1][0] : '';
+}
+        private function ri_get_title($single){
+                if($this->params['title']){
+                        $title_array = get_post_meta($single->ID, $this->params['title']);
+                        $title = isset( $title_array[0] ) ? $title_array[0] : '';
+                        if(!$title){$title = $single->post_title;}
+                }
+                else { $title = $single->post_title;}
+                $returnlink = ($this->params['lightbox'])? add_query_arg( array( 'ID' => absint( $single->ID ) ), VRI_PLUGIN_URL . 'includes/RecipeIndexPost.php' ) : get_permalink($single->ID);
+                $rifontsize=$this->ri_get_font_size();
+                $line_height = $rifontsize ? 1.2 * $rifontsize : 0;
+                $showtitle = esc_attr( $this->params['showtitle'] );
+                $rititle='<div class="riback rinojs '.$showtitle.'"></div><div class="rititle rinojs '.$showtitle.'"><p style="font-size:'.$rifontsize.'px;line-height:'.$line_height.'px;"><a href="'.esc_url( $returnlink ).'"'.( $this->params['lightbox'] ? ' class="ripost"' : '' ).'>'.esc_html( $title ).'</a></p></div>';
+                return $rititle;
+        }
 	
 	public function display(){
         return $this->rioutput;
@@ -155,18 +204,21 @@ Inspired by the Category Grid View Plugin by Anshul Sharma
 }
 
  function ri_init_js(){
-	 global $paginateVal;
-	 if (is_null($paginateVal)) {
-		 $paginateVal = 0;
-	 }
+         if ( is_admin() ) {
+                 return;
+         }
+
+         global $paginateVal;
+         if ( ! isset( $paginateVal ) ) {
+                 return;
+         }
     echo '<script type="text/javascript">';
-    echo 'paginateVal = '.$paginateVal.';';
+    echo 'var paginateVal = '.absint( $paginateVal ).';';
     echo '</script>';
     do_action('ri_init_js');
 }
 
 function get_ri_option($option) {
-  $get_riview_options = get_option('riview');
-  return $get_riview_options[$option];
+  return get_riview_option($option);
 }
 

@@ -3,39 +3,26 @@
 Administration Page
  */
 
-function riview_admin_scripts() {
- $ri_url = plugin_dir_url(__FILE__);
- $ri_dir = plugin_dir_path(__FILE__);
-	    if ( file_exists($ri_dir . 'js/riviewoptions.js') ) {
-      		wp_enqueue_script( 'RecipeIndexOptionjs', $ri_url . 'js/riviewoptions.js', array( 'jquery' ));
-        }
-}
-
-register_activation_hook(__FILE__, 'riview_verify_options');
-register_uninstall_hook(__FILE__, 'riview_remove_options');
-
-function riview_admin_css() {
-	$riStyleUrl = plugin_dir_url(__FILE__) . 'css/riview-settings.css';
-        $riStyleFile = plugin_dir_path(__FILE__) . 'css/riview-settings.css';
-        if ( file_exists($riStyleFile) ) {
-            wp_register_style('RecipeIndexAdminStyleSheets', $riStyleUrl);
-            wp_enqueue_style( 'RecipeIndexAdminStyleSheets');
-        }
- }
-
-if (isset($_GET['page']) && $_GET['page'] == 'riview') {
-add_action('admin_print_scripts', 'riview_admin_scripts');
-add_action('admin_print_styles', 'riview_admin_css' );
-}
+register_activation_hook(VRI_PLUGIN_FILE, 'riview_verify_options');
+register_uninstall_hook(VRI_PLUGIN_FILE, 'riview_remove_options');
 
 function riview_upload_dir($dir) {
   $riuploadpath = wp_upload_dir();
-  if ($riuploadpath['baseurl']=='') $riuploadpath['baseurl'] = get_bloginfo('siteurl').'/wp-content/uploads';
-  return $riuploadpath[$dir];
-}
+  if ( ! empty( $riuploadpath['error'] ) ) {
+        return '';
+  }
 
-function ri_admin() {
-//	add_options_page('Settings - Visual Recipe Index', 'Visual Recipe Index', 'manage_options', riview, 'ri_options');
+  if ( empty( $riuploadpath[ $dir ] ) ) {
+        if ( 'baseurl' === $dir ) {
+                return trailingslashit( home_url( 'wp-content/uploads' ) );
+        }
+
+        if ( 'basedir' === $dir ) {
+                return trailingslashit( WP_CONTENT_DIR ) . 'uploads';
+        }
+  }
+
+  return $riuploadpath[ $dir ];
 }
 
 function riview_update_options() {
@@ -43,21 +30,34 @@ function riview_update_options() {
 
   // enable settings for lower level users, but with limitations
   if(!current_user_can('edit_plugins')) wp_die(__('You are not authorised to perform this operation.', 'riview'));
-  $options = get_option('riview');
+  $options = riview_get_options();
 
   foreach (riview_default_settings() as $key => $value):
-  	if(($key!='default_image')&& ($key!='custom_image')):
-   $options[$key] = stripslashes((string)$_POST[$key]);
+        if(($key!='default_image')&& ($key!='custom_image')):
+   if ( isset( $_POST[$key] ) ) {
+        $raw_value = wp_unslash( $_POST[$key] );
+        if ( in_array( $key, array( 'credits', 'load_comments' ), true ) ) {
+                $options[$key] = $raw_value ? 1 : 0;
+        } elseif ( in_array( $key, array( 'lightbox_width', 'lightbox_height' ), true ) ) {
+                $options[$key] = absint( $raw_value );
+        } else {
+                $options[$key] = sanitize_text_field( $raw_value );
+        }
+   } else {
+        if ( in_array( $key, array( 'credits', 'load_comments' ), true ) ) {
+                $options[$key] = 0;
+        }
+   }
    endif;
   endforeach;
 
-  
+
   if(isset($_POST['remove-custom'])):
    $options['custom_image'] = $options['default_image'];
-  elseif($_FILES["custom_image"]["type"]):
-   $valid = is_valid_riview_image('custom_image');
-   if($valid):
-    $options['custom_image'] = riview_upload_dir('baseurl'). "/". $_FILES["custom_image"]["name"];
+  elseif(!empty($_FILES["custom_image"]["name"])):
+   $uploaded = is_valid_riview_image('custom_image');
+   if($uploaded):
+    $options['custom_image'] = esc_url_raw( $uploaded );
    endif;
   endif;
 
@@ -67,7 +67,8 @@ function riview_update_options() {
   // reset?
   if (isset($_POST['reset']))riview_setup_options();
 
-  wp_redirect(admin_url('options-general.php?page=riview&settings-updated=true'));
+  wp_safe_redirect(admin_url('options-general.php?page=visual-recipe-index&settings-updated=true'));
+  exit;
 }
 
 
@@ -89,7 +90,7 @@ function ri_options() {
     </div>
     
     <div id="settings">
-	<form action="<?php echo admin_url('admin-post.php?action=riview_update'); ?>" method="post" enctype="multipart/form-data">
+        <form action="<?php echo esc_url( admin_url('admin-post.php?action=riview_update') ); ?>" method="post" enctype="multipart/form-data">
 
    		<?php wp_nonce_field('riview'); ?>
 
@@ -97,21 +98,24 @@ function ri_options() {
 
    		<?php if (isset($_GET['settings-updated'])): ?>
    		<div class="updated fade below-h2">
-    		<p><?php printf(__('Settings saved. %s', 'riview'),'<a href="' . user_trailingslashit(get_bloginfo('url')) . '">' . __('View site','riview') . '</a>'); ?></p>
-   		</div>
-   		<?php elseif (isset($_GET['error'])):
-     		$errors  = array(
+                <p><?php printf(__('Settings saved. %s', 'riview'),'<a href="' . esc_url( user_trailingslashit(get_bloginfo('url')) ) . '">' . __('View site','riview') . '</a>'); ?></p>
+                </div>
+                <?php elseif (isset($_GET['error'])):
+                $errors  = array(
        1 => __("Please upload a valid image file!","riview"),
        2 => __("The file you uploaded doesn't seem to be a valid JPEG, PNG or GIF image","riview"),
        3 => __("The image could not be saved on your server","riview")
      );
 
    ?>
-   
-   		<div class="error fade below-h2">
-    		<p><?php printf(__('Error: %s', 'riview'),$errors[$_GET['error']]); ?></p>
-   		</div>
-   		<?php endif; ?>
+
+                <div class="error fade below-h2">
+                <?php $error_code = absint( $_GET['error'] ); ?>
+                <?php if ( isset( $errors[ $error_code ] ) ) : ?>
+                <p><?php printf(__('Error: %s', 'riview'), $errors[ $error_code ]); ?></p>
+                <?php endif; ?>
+                </div>
+                <?php endif; ?>
         
 
         <table class="form-table">
@@ -135,8 +139,8 @@ function ri_options() {
             <tr>
         		<th scope="row"><p><?php _e("Lightbox Dimensions","riview"); ?><span><?php _e("Enter the dimensions of the lightbox in pixels. (Default: 700px x 600px)", "riview"); ?></span></p></th>
         		<td>
-         			<input type="text" size="4" name="lightbox_width" value="<?php echo get_riview_option('lightbox_width'); ?>"/>width(px)&nbsp;&nbsp;&nbsp;&nbsp;X&nbsp;&nbsp;&nbsp;&nbsp;
-                    <input type="text" size="4" name="lightbox_height" value="<?php echo get_riview_option('lightbox_height'); ?>"/>height(px)</br>
+                                <input type="text" size="4" name="lightbox_width" value="<?php echo esc_attr( get_riview_option('lightbox_width') ); ?>"/>width(px)&nbsp;&nbsp;&nbsp;&nbsp;X&nbsp;&nbsp;&nbsp;&nbsp;
+                    <input type="text" size="4" name="lightbox_height" value="<?php echo esc_attr( get_riview_option('lightbox_height') ); ?>"/>height(px)</br>
                     <span>Note: To make the height of the lightbox dynamic, set Height : 0 px. This will make the lightbox height equal to the length of the post. </span>
          		</td>
          	</tr> 
@@ -156,20 +160,23 @@ function ri_options() {
             <tr>
         		<th scope="row"><p><?php _e("Custom default image","riview"); ?><span><?php _e("Upload an image to replace the default image; It is shown when no image is available for a post.","riview"); ?></span></p></th>
         		<td>
-          			<?php if(is_writable(riview_upload_dir('basedir'))): ?>
-           			<input type="file" name="custom_image" id="custom_image" />
-           			<?php if(get_riview_option('custom_image')!=get_riview_option('default_image')): ?>
-           			<button type="submit" class="button" name="remove-custom" value="0"><?php _e("Remove current image","riview"); ?></button>
-           			<div class="clear-block">
-           				<div class="image-preview"><img src="<?php echo get_riview_option('custom_image'); ?>" style="padding:10px;" /></div>
-           			</div>
-           			<?php endif; ?>
-         			<?php else: ?>
-         			<p class="error" style="padding: 4px;"><?php printf(__("Directory %s doesn't have write permissions - can't upload!","riview"),'<strong>'.riview_upload_dir('basedir').'</strong>'); ?></p><p><?php _e("Check your upload path in Settings/Misc or CHMOD this directory to 755/777.<br />Contact your host if you don't know how","riview"); ?></p>
-         			<?php endif; ?>
-         			<input type="hidden" name="custom_image" value="<?php echo get_riview_option('custom_image'); ?>">
-        		</td>
-       		</tr>
+                                <?php $upload_basedir = riview_upload_dir('basedir'); ?>
+                                <?php if($upload_basedir && wp_is_writable($upload_basedir)): ?>
+                                <input type="file" name="custom_image" id="custom_image" />
+                                <?php if(get_riview_option('custom_image')!=get_riview_option('default_image')): ?>
+                                <button type="submit" class="button" name="remove-custom" value="0"><?php _e("Remove current image","riview"); ?></button>
+                                <div class="clear-block">
+                                        <div class="image-preview"><img src="<?php echo esc_url( get_riview_option('custom_image') ); ?>" style="padding:10px;" alt="" /></div>
+                                </div>
+                                <?php endif; ?>
+                                <?php else: ?>
+                                <p class="error" style="padding: 4px;">
+                                        <?php printf(__("Directory %s doesn't have write permissions - can't upload!","riview"),'<strong>'.esc_html($upload_basedir).'</strong>'); ?>
+                                </p><p><?php _e("Check your upload path in Settings/Misc or CHMOD this directory to 755/777.<br />Contact your host if you don't know how","riview"); ?></p>
+                                <?php endif; ?>
+                                <input type="hidden" name="custom_image" value="<?php echo esc_attr( get_riview_option('custom_image') ); ?>">
+                        </td>
+                </tr>
                  
     	</table>
         
@@ -304,32 +311,46 @@ by <a href="<?php echo AUTHOR_URI; ?>"><?php echo PLUGIN_AUTHOR; ?></a></p>
 
 //Check if the image is valid image or not
 function is_valid_riview_image($image){
+  if ( empty( $_FILES[ $image ]['tmp_name'] ) ) {
+        return false;
+  }
+
   // check mime type
-  if(!eregi('image/', $_FILES[$image]['type'])):
-   wp_redirect(admin_url('options-general.php?page=riview&error=1'));
+  if( empty( $_FILES[$image]['type'] ) || ! preg_match( '/^image\//i', $_FILES[$image]['type'] ) ):
+   wp_safe_redirect(admin_url('options-general.php?page=visual-recipe-index&error=1'));
    exit(0);
   endif;
 
   // check if valid image
   $imageinfo = getimagesize($_FILES[$image]['tmp_name']);
-  if($imageinfo['mime'] != 'image/gif' && $imageinfo['mime'] != 'image/jpeg' && $imageinfo['mime'] != 'image/png' && isset($imageinfo)):
-   wp_redirect(admin_url('options-general.php?page=riview&error=2'));
+  if( empty( $imageinfo['mime'] ) || ( $imageinfo['mime'] != 'image/gif' && $imageinfo['mime'] != 'image/jpeg' && $imageinfo['mime'] != 'image/png' ) ):
+   wp_safe_redirect(admin_url('options-general.php?page=visual-recipe-index&error=2'));
    exit(0);
   endif;
 
-  list($width, $height) = $imageinfo;
+  $uploads = wp_upload_dir();
+  if ( ! empty( $uploads['error'] ) ) {
+        wp_safe_redirect(admin_url('options-general.php?page=visual-recipe-index&error=3'));
+        exit(0);
+  }
 
-  $directory = riview_upload_dir('basedir').'/';
-  if(!@move_uploaded_file($_FILES[$image]['tmp_name'],$directory.$_FILES[$image]["name"])):
-   wp_redirect(admin_url('options-general.php?page=riview&error=3'));
+  $directory = trailingslashit( $uploads['path'] );
+  if ( ! wp_mkdir_p( $directory ) ) {
+        wp_safe_redirect(admin_url('options-general.php?page=visual-recipe-index&error=3'));
+        exit(0);
+  }
+
+  $filename = wp_unique_filename( $directory, sanitize_file_name( wp_unslash( $_FILES[$image]['name'] ) ) );
+  $target = $directory . $filename;
+  if(!@move_uploaded_file($_FILES[$image]['tmp_name'],$target)):
+   wp_safe_redirect(admin_url('options-general.php?page=visual-recipe-index&error=3'));
    exit(0);
   else:
-   return $width.'x'.$height;
+   return trailingslashit( $uploads['url'] ) . $filename;
   endif;
 }
 
 
-add_action('admin_menu', 'ri_admin');
 add_action('admin_post_riview_update', 'riview_update_options');
 add_action('admin_init', 'riview_verify_options');
 

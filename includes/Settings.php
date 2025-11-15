@@ -7,9 +7,9 @@ Inspired by the Category Grid View Plugin by Anshul Sharma
 
 //Default Plugin Settings
 function riview_default_settings(){
-	$defaults = array(
-    'default_image' => plugin_dir_url(__FILE__) . '/includes/default.jpg',
-	'custom_image' => plugin_dir_url(__FILE__)  .'/includes/default.jpg',
+        $defaults = array(
+    'default_image' => VRI_PLUGIN_URL . 'includes/default.jpg',
+        'custom_image' => VRI_PLUGIN_URL  .'includes/default.jpg',
     'credits' => 1,
     'color_scheme' => 'light',
     'image_source' => 'featured',
@@ -21,23 +21,8 @@ function riview_default_settings(){
 
  
 function riview_verify_options(){
-  $default_settings = riview_default_settings();
-  $current_settings = get_option('riview');
-  if(!$current_settings):
-   riview_setup_options();
-  else:
-  //   if (version_compare($current_settings['plugin_version'], PLUGIN_VERSION, '!=')):
-     // check for new options
-     foreach($default_settings as $option=>$value):
-      if(!array_key_exists($option, $current_settings)) $current_settings[$option] = $default_settings[$option];
-     endforeach;
-
-    // update theme version
-   // $current_settings['plugin_version'] = $plugin_data['Version'];
-    update_option('riview' , $current_settings);
-
- // endif;
-  endif;
+  $current_settings = riview_get_options();
+  update_option('riview' , $current_settings);
       do_action('riview_verify_options');
 }
 
@@ -55,15 +40,26 @@ function riview_remove_options() {
   do_action('riview_remove_options');
 }
 
+function riview_get_options() {
+  $current_settings = get_option('riview');
+  if ( ! is_array( $current_settings ) ) {
+        $current_settings = array();
+  }
+
+  return wp_parse_args( $current_settings, riview_default_settings() );
+}
+
 function get_riview_option($option) {
-  $get_riview_options = get_option('riview');
-  return $get_riview_options[$option];
+  $get_riview_options = riview_get_options();
+  return isset( $get_riview_options[$option] ) ? $get_riview_options[$option] : '';
 }
 
 
 function print_riview_option($option) {
-  $get_riview_options = get_option('riview');
-  echo $get_riview_options[$option];
+  $get_riview_options = riview_get_options();
+  if ( isset( $get_riview_options[$option] ) ) {
+        echo $get_riview_options[$option];
+  }
 }
 
 
