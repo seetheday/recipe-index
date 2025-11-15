@@ -70,6 +70,77 @@ Inspired by the Category Grid View Plugin by Anshul Sharma
     }
 	
         private function ri_get_image($single){
+                $ri_img        = '';
+                $attachment_id = 0;
+                ob_start();
+                ob_end_clean();
+                if(get_ri_option('image_source')=='featured'){
+                        if (has_post_thumbnail($single->ID )){
+                                $attachment_id = get_post_thumbnail_id( $single->ID );
+                                $image = wp_get_attachment_image_src( $attachment_id, 'full' );
+                                $ri_img = isset( $image[0] ) ? $image[0] : '';
+                        }
+                        else {
+                                $output = preg_match_all('/<img.+src=[\'\"]([^\'\"]+)[\'\"].*>/i', $single->post_content, $matches);
+                                if ( ! empty( $matches[1][0] ) ) {
+                                        $ri_img = $matches [1] [0];
+                                }
+                        }
+                }
+                else {
+                        $output = preg_match_all('/<img.+src=[\'\"]([^\'\"]+)[\'\"].*>/i', $single->post_content, $matches);
+                        if ( ! empty( $matches[1][0] ) ) {
+                                $ri_img = $matches [1] [0];
+                        }
+                }
+
+                if(empty($ri_img)){ //Defines a default image
+                        $ri_img = get_ri_option('custom_image');
+                }
+
+                $size=array();
+                $size=$this->ri_get_size();
+                $width  = absint( $size[0] );
+                $height = absint( $size[1] );
+
+                        if((!is_numeric($this->params['quality']))||(int)$this->params['quality']>100)
+                                $this->params['quality']='75';
+
+                $returnlink = ($this->params['lightbox'])? add_query_arg( array( 'ID' => absint( $single->ID ) ), VRI_PLUGIN_URL . 'includes/RecipeIndexPost.php' ) : get_permalink($single->ID);
+
+                $image_html = '';
+                if ( $attachment_id ) {
+                        $image_html = wp_get_attachment_image(
+                                $attachment_id,
+                                array( $width, $height ),
+                                false,
+                                array(
+                                        'class' => 'ri-thumb',
+                                        'alt'   => get_the_title( $single->ID ),
+                                        'title' => get_the_title( $single->ID ),
+                                )
+                        );
+                }
+
+                if ( empty( $image_html ) && ! empty( $ri_img ) ) {
+                        $image_html = sprintf(
+                                '<img class="ri-thumb" src="%1$s" alt="%2$s" title="%2$s" width="%3$d" height="%4$d" loading="lazy" />',
+                                esc_url( $ri_img ),
+                                esc_attr( get_the_title( $single->ID ) ),
+                                $width,
+                                $height
+                        );
+                }
+
+                if ( empty( $image_html ) ) {
+                        return '';
+                }
+
+                return '<a href="'.esc_url( $returnlink ).'"'.( $this->params['lightbox'] ? ' class="ripost"' : '' ).'>'.$image_html.'</a>';
+
+
+        }
+        private function ri_get_image($single){
                 $ri_img = '';
                 ob_start();
                 ob_end_clean();
