@@ -5,22 +5,26 @@ Author: Simon Austin (simon@kremental.com)
 Original Author : Anshul Sharma (contact@anshulsharma.in)
  */
 
-if (!isset($_GET["ID"]) || intval($_GET["ID"]) == 0) die("Wrong parameters");
+if ( ! defined( 'ABSPATH' ) ) {
+    require_once dirname( dirname( dirname( dirname( dirname( __FILE__ ) ) ) ) ) . '/wp-load.php';
+}
 
-$theID =$_GET["ID"];
+$theID = isset( $_GET['ID'] ) ? absint( $_GET['ID'] ) : 0;
+if ( 0 === $theID ) {
+    wp_die( esc_html__( 'Wrong parameters', 'riview' ) );
+}
 
 //Meta information about the post
 function ri_posted_on() {
-	$theID =$_GET["ID"];
-	printf( __( '<span>Posted on <a href="%1$s" title="%2$s" rel="bookmark"><time class="ri-entry-date" datetime="%3$s" pubdate>%4$s</time></a> by <a href="%5$s" title="%6$s" rel="author">%7$s</a></span>', 'riview' ),
-		esc_url(get_permalink()),
-		esc_attr( get_the_time()),
-		esc_attr( get_the_date('c') ),
-		esc_html( get_the_date() ),
-		esc_url( get_author_posts_url( get_the_author_meta( 'ID' ) ) ),
-		sprintf( esc_attr__( 'View all posts by %s', 'riview' ), get_the_author()),
-		esc_html( get_the_author() )
-	);
+        printf( __( '<span>Posted on <a href="%1$s" title="%2$s" rel="bookmark"><time class="ri-entry-date" datetime="%3$s" pubdate>%4$s</time></a> by <a href="%5$s" title="%6$s" rel="author">%7$s</a></span>', 'riview' ),
+                esc_url(get_permalink()),
+                esc_attr( get_the_time()),
+                esc_attr( get_the_date('c') ),
+                esc_html( get_the_date() ),
+                esc_url( get_author_posts_url( get_the_author_meta( 'ID' ) ) ),
+                sprintf( esc_attr__( 'View all posts by %s', 'riview' ), get_the_author()),
+                esc_html( get_the_author() )
+        );
 }
 ?>
 <?php
@@ -49,8 +53,8 @@ function ri_posted_on() {
 
 	?></title>
 <link rel="profile" href="http://gmpg.org/xfn/11" />
-<link rel="stylesheet" type="text/css" media="all" href="<?php echo plugin_dir_url(__FILE__).'css/riview-lightbox.css' ?>" />
-<link rel="pingback" href="<?php bloginfo( 'pingback_url' ); ?>" /> 
+<link rel="stylesheet" type="text/css" media="all" href="<?php echo esc_url( VRI_PLUGIN_URL . 'css/cgview-lightbox.css' ); ?>" />
+<link rel="pingback" href="<?php bloginfo( 'pingback_url' ); ?>" />
 
 <?php
 	/* We add some JavaScript to pages with the comment form
@@ -64,25 +68,38 @@ function ri_posted_on() {
 	 * generally use this hook to add elements to <head> such
 	 * as styles, scripts, and meta tags.
 	 */
-	if( !is_admin()){
-	wp_deregister_script('jquery');
-	}
-	wp_head();
+        wp_head();
 ?>
 
 </head>
 
 <body>
+<?php
+$lightbox_width = absint( get_ri_option('lightbox_width') );
+$lightbox_height = absint( get_ri_option('lightbox_height') );
+$width_style = $lightbox_width ? ' style="width:'.esc_attr( $lightbox_width ).'px;"' : '';
+$height_style = $lightbox_height ? ' style="height:'.esc_attr( $lightbox_height ).'px;"' : '';
+?>
 <div id="ri-page">
-	<div id="ri-main"  style="width:<?php echo get_ri_option('lightbox_width'); ?>px;">
+        <div id="ri-main" <?php echo $width_style; ?>>
        <div id="ri-primary">
-			<div id="ri-content" role="main">
-            	<?php query_posts('p='.$theID); ?>
-				<?php while (have_posts()) : the_post(); ?>
+                        <div id="ri-content" role="main">
+                <?php
+                $recipe_query = new WP_Query(
+                        array(
+                                'p' => $theID,
+                                'post_type' => 'any',
+                                'post_status' => 'publish',
+                        )
+                );
+                if ( $recipe_query->have_posts() ) :
+                        while ( $recipe_query->have_posts() ) :
+                                $recipe_query->the_post();
+                ?>
                 <article id="ri-post-<?php echo $theID; ?>" <?php post_class('',$theID); ?>>
-                	<div id="ri-header-wrap">
+                        <div id="ri-header-wrap">
                         <header class="ri-header">
-                            <h1 class="ri-title"><a href="<?php echo get_permalink(); ?>" title="<?php printf( esc_attr__( 'Permalink to %s', 'riview' ), get_the_title()) ?>" rel="bookmark"><?php the_title(); ?></a></h1>
+                            <h1 class="ri-title"><a href="<?php echo esc_url( get_permalink() ); ?>" title="<?php printf( esc_attr__( 'Permalink to %s', 'riview' ), get_the_title()) ?>" rel="bookmark"><?php the_title(); ?></a></h1>
                 
                             <div class="ri-entry-meta">
                                 <?php ri_posted_on(); ?>
@@ -100,13 +117,13 @@ function ri_posted_on() {
                       </div><!-- #ri-header-wrap -->
             
                      <?php if ( is_search() ) : // Only display Excerpts for Search ?>
-                    <div class="ri-entry-summary"  style=" <?php if (get_ri_option('lightbox_height'))echo 'height:'.get_ri_option('lightbox_height').'px;' ?>">
+                    <div class="ri-entry-summary"  <?php echo $height_style; ?>>
                         <?php the_excerpt(); ?>
                     </div>
                     <?php else : ?>
-                    
-                    <div class="ri-entry-content" style=" <?php if (get_ri_option('lightbox_height'))echo 'height:'.get_ri_option('lightbox_height').'px;' ?>">
-                        <?php echo the_content(); ?>
+
+                    <div class="ri-entry-content" <?php echo $height_style; ?>>
+                        <?php the_content(); ?>
                         <?php wp_link_pages( array( 'before' => '<div class="page-link"><span>' . __( 'Pages:', 'riview' ) . '</span>', 'after' => '</div>' ) ); ?>
                     </div><!-- .entry-content -->
                     <!-- <?php endif; ?> -->
@@ -147,16 +164,17 @@ function ri_posted_on() {
                         <?php edit_post_link( __( 'Edit', 'riview' ), '<span class="ri-sep"> | </span><span class="ri-edit-link">', '</span>' ); ?>
                     </footer><!-- #ri-entry-meta -->
                 </article><!-- #post-<?php $theID; ?> -->
-            				<?php if (get_ri_option('load_comments')) {
-                                 comments_template( '', true ); 
+                                        <?php if (get_ri_option('load_comments')) {
+                                 comments_template( '', true );
                              }
-							 ?>
+                                                         ?>
 
-			<?php endwhile;?>
-			</div><!-- #content -->
-		</div><!-- #primary -->
+                        <?php endwhile; endif; wp_reset_postdata(); ?>
+                        </div><!-- #content -->
+                </div><!-- #primary -->
 </div><!-- #main -->
 
+<?php wp_footer(); ?>
 </body>
 </html>
 
