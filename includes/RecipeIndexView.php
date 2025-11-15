@@ -140,6 +140,53 @@ Inspired by the Category Grid View Plugin by Anshul Sharma
 
 
         }
+        private function ri_get_image($single){
+                $ri_img = '';
+                ob_start();
+                ob_end_clean();
+                if(get_ri_option('image_source')=='featured'){
+                        if (has_post_thumbnail($single->ID )){
+                                $image = wp_get_attachment_image_src(get_post_thumbnail_id( $single->ID ), 'single-post-thumbnail' );
+                                $ri_img = isset( $image[0] ) ? $image[0] : '';
+                        }
+                        else {
+                                $output = preg_match_all('/<img.+src=[\'"]([^\'"]+)[\'"].*>/i', $single->post_content, $matches);
+                                if ( ! empty( $matches[1][0] ) ) {
+                                        $ri_img = $matches [1] [0];
+                                }
+                        }
+                }
+                else {
+                        $output = preg_match_all('/<img.+src=[\'"]([^\'"]+)[\'"].*>/i', $single->post_content, $matches);
+                        if ( ! empty( $matches[1][0] ) ) {
+                                $ri_img = $matches [1] [0];
+                        }
+                }
+
+                if(empty($ri_img)){ //Defines a default image
+                        $ri_img = get_ri_option('custom_image');
+                }
+
+                $size=array();
+                $size=$this->ri_get_size();
+
+                        if((!is_numeric($this->params['quality']))||(int)$this->params['quality']>100)
+                                $this->params['quality']='75';
+                //uses TimThumb to generate thumbnails on the fly
+                $returnlink = ($this->params['lightbox'])? add_query_arg( array( 'ID' => absint( $single->ID ) ), VRI_PLUGIN_URL . 'includes/RecipeIndexPost.php' ) : get_permalink($single->ID);
+                $thumb_url = sprintf(
+                        '%1$sincludes/timthumb.php?src=%2$s&amp;h=%3$d&amp;w=%4$d&amp;zc=1&amp;q=%5$d',
+                        esc_url( VRI_PLUGIN_URL ),
+                        rawurlencode( $ri_img ),
+                        absint( $size[1] ),
+                        absint( $size[0] ),
+                        absint( $this->params['quality'] )
+                );
+                return '<a href="'.esc_url( $returnlink ).'"'.( $this->params['lightbox'] ? ' class="ripost"' : '' ).'><img src="'.esc_url( $thumb_url ).'" alt="'.esc_attr( $single->post_title ).'" title="'.esc_attr( $single->post_title ).'"/></a>';
+
+
+        }
+	
         private function ri_get_title($single){
                 if($this->params['title']){
                         $title_array = get_post_meta($single->ID, $this->params['title']);
